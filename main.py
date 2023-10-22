@@ -2,6 +2,8 @@ import sys
 from PyQt5.QtWidgets import *
 from PyQt5 import uic
 from PyQt5.QtGui import *
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QFrame, QColorDialog
+from PyQt5.QtGui import QColor
 import cv2
 import numpy as np
 import filters
@@ -37,6 +39,10 @@ class WindowClass(QMainWindow, form_class):
         self.denoiseCheckBox.stateChanged.connect(self.change_denoise_apply_state)
 
         self.generateButton.clicked.connect(self.apply_filter)
+        self.strokeColorButton.clicked.connect(self.show_color_dialog)
+        self.strokeColor = QColor(255, 255, 255)
+        self.strokeColorFrame.setStyleSheet(
+            'QWidget { background-color: %s }' % self.strokeColor.name())
         self.saveImageButton.clicked.connect(self.save_image)
 
     def open_file_from_path(self):
@@ -50,6 +56,8 @@ class WindowClass(QMainWindow, form_class):
         ratio2 = 471 / width
         ratio = min(ratio1, ratio2)
         print(ratio)
+
+        #crashes when using the ratio to image height and width(same with fx and fy)
         qImg = qimage2ndarray.array2qimage(cv2.resize(input_to_show,
             dsize=(471,331)), normalize=False).rgbSwapped()
         self.inputImg.setPixmap(QPixmap(qImg))
@@ -76,8 +84,7 @@ class WindowClass(QMainWindow, form_class):
                 filtered = filters.apply_gate(filtered, thresh)
             if self.denoiseApplied:
                 strength = self.denoiseSlider.value()
-                print("---")
-                filtered = filters.apply_denoise(filtered, strength)
+                filtered = filters.apply_denoise(filtered, strength, thresh)
             print(filtered.shape)
 
             filtered_to_show = cv2.resize(filtered, dsize=(511, 461))
@@ -85,6 +92,12 @@ class WindowClass(QMainWindow, form_class):
             self.outputImg.setPixmap(QPixmap(qImg))
             self.filtered = filtered
             del filtered
+
+    def show_color_dialog(self):
+        self.strokeColor = QColorDialog.getColor()
+        if self.strokeColor.isValid():
+            self.frm.setStyleSheet(
+                'QWidget { background-color: %s }' % self.strokeColor.name())
 
     def save_image(self):
         file_name, file_extension = self.file_loc.split(".")
