@@ -5,6 +5,7 @@ from PyQt5.QtGui import *
 import cv2
 import numpy as np
 import filters
+import qimage2ndarray
 
 form_class = uic.loadUiType("program.ui")[0]
 
@@ -27,21 +28,30 @@ class WindowClass(QMainWindow, form_class):
         self.cannyRatioSlider.setSingleStep(1)
         self.gateSlider.setRange(0,255)
         self.gateSlider.setSingleStep(1)
+        self.denoiseSlider.setRange(0,30)
+        self.denoiseSlider.setSingleStep(1)
 
         self.gateApplied = False
         self.gateCheckBox.stateChanged.connect(self.change_gate_apply_state)
+        self.denoiseApplied = False
+        self.denoiseCheckBox.stateChanged.connect(self.change_denoise_apply_state)
 
         self.generateButton.clicked.connect(self.apply_filter)
+        self.saveImageButton.clicked.connect(self.save_image)
 
     def open_file_from_path(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', './')
         self.file_loc = str(fname[0])
-        input_img_matrix = cv2.imread(self.file_loc, 0)
-        input_img_matrix = cv2.cvtColor(input_img_matrix, cv2.COLOR_BGR2RGB)
-        input_img_matrix = cv2.resize(input_img_matrix, dsize=(400, 640))
-        print(input_img_matrix.shape)
-        qImg = QImage(input_img_matrix.data, input_img_matrix.shape[1],
-                      input_img_matrix.shape[0], 3 * input_img_matrix.shape[1], QImage.Format_RGB888).rgbSwapped()
+        input_to_show = cv2.imread(self.file_loc)
+        height, width, channel = map(int, input_to_show.shape)
+
+        #normalize
+        ratio1 = 331 / height
+        ratio2 = 471 / width
+        ratio = min(ratio1, ratio2)
+        print(ratio)
+        qImg = qimage2ndarray.array2qimage(cv2.resize(input_to_show,
+            dsize=(471,331)), normalize=False).rgbSwapped()
         self.inputImg.setPixmap(QPixmap(qImg))
 
         '''if self.file_loc:
@@ -50,6 +60,9 @@ class WindowClass(QMainWindow, form_class):
 
     def change_gate_apply_state(self):
         self.gateApplied = not self.gateApplied
+
+    def change_denoise_apply_state(self):
+        self.denoiseApplied= not self.denoiseApplied
 
     def apply_filter(self):
         if self.file_loc != "":
@@ -61,15 +74,21 @@ class WindowClass(QMainWindow, form_class):
             if self.gateApplied:
                 thresh = self.gateSlider.value()
                 filtered = filters.apply_gate(filtered, thresh)
-
-            file_extension = self.file_loc.split(".")[1]
+            if self.denoiseApplied:
+                strength = self.denoiseSlider.value()
+                print("---")
+                filtered = filters.apply_denoise(filtered, strength)
             print(filtered.shape)
-            cv2.imwrite(self.file_loc + '_filtered.' + file_extension, filtered)
 
-            filtered_to_show = cv2.resize(filtered, dsize=(400, 640))
-            qImg = QImage(filtered_to_show.data, filtered_to_show.shape[1],
-                          filtered_to_show.shape[0], 3 * filtered_to_show.shape[1])
+            filtered_to_show = cv2.resize(filtered, dsize=(511, 461))
+            qImg = qimage2ndarray.array2qimage(filtered_to_show, normalize=False)
             self.outputImg.setPixmap(QPixmap(qImg))
+            self.filtered = filtered
+            del filtered
+
+    def save_image(self):
+        file_name, file_extension = self.file_loc.split(".")
+        cv2.imwrite(file_name + '_filtered.' + file_extension, self.filtered)
 
     def closeEvent(self, event):
         self.deleteLater()

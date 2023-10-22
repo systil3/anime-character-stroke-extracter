@@ -19,3 +19,9 @@ def apply_filter(imgpath, sobelw, cannyw, lapw):
 def apply_gate(target, thresh):
     target[target<thresh] = 0
     return target
+
+def apply_denoise(target, strength, thresh):
+    print("---")
+    res = cv2.fastNlMeansDenoising(target, None, strength, strength, 5, 21)
+    res[res<thresh] = 0
+    return res
