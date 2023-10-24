@@ -11,33 +11,6 @@ import filters
 import qimage2ndarray
 
 form_class = uic.loadUiType("program.ui")[0]
-def apply_filter(imgpath, sobelw, cannyw, lapw):
-    img = cv2.imread(imgpath, 0).astype(np.uint8)
-
-
-    dst1_sobel = cv2.Sobel(img, ddepth=-1,
-                           dx=1, dy=1,
-                           borderType=cv2.BORDER_DEFAULT)
-    dst1_canny = cv2.Canny(img, threshold1=100, threshold2=255)
-    dst1_lap = cv2.Laplacian(img, ksize=3, ddepth=-1, borderType=0)
-
-    return dst1_sobel * sobelw + dst1_canny * cannyw + dst1_lap * lapw
-
-def apply_gate(target, thresh):
-    target[target<thresh] = 0
-    return target
-
-def apply_denoise(target, strength, thresh):
-
-    res = cv2.fastNlMeansDenoising(target, target, strength, 5, 21)
-    print("---")
-    ker_sharpen = np.array([
-        [1, -2, 1],
-        [-2, 4, -2],
-        [1, -2, 1]])
-    #res = cv2.filter2D(target, -1, ker_sharpen)
-    res[res<thresh] = 0
-    return res
 
 class WindowClass(QMainWindow, form_class):
     def __init__(self) :
@@ -48,6 +21,7 @@ class WindowClass(QMainWindow, form_class):
         self.inputImg.setPixmap(self.inputPixmap)
         self.outputPixmap = QPixmap()
         self.outputImg.setPixmap(self.outputPixmap)
+        self.filtered = np.array([])
         self.file_loc = ""
 
         self.sobelRatioSlider.setRange(0,100)
@@ -67,25 +41,30 @@ class WindowClass(QMainWindow, form_class):
         self.denoiseCheckBox.stateChanged.connect(self.change_denoise_apply_state)
 
         self.generateButton.clicked.connect(self.apply_filter)
-        self.strokeColorButton.clicked.connect(self.show_color_dialog)
+        self.strokeColorButton.clicked.connect(self.change_color)
         self.strokeColor = QColor(255, 255, 255)
         self.strokeColorFrame.setStyleSheet(
             'QWidget { background-color: %s }' % self.strokeColor.name())
         self.saveImageButton.clicked.connect(self.save_image)
 
+        self.imageSize = (0, 0, 3)
+        self.inputRatio = -1
+        self.outputRatio = -1
+
     def open_file_from_path(self):
         fname = QFileDialog.getOpenFileName(self, 'Open file', './')
         self.file_loc = str(fname[0])
         input_to_show = cv2.imread(self.file_loc).astype(np.uint8)
-        height1, width1, channel1 = map(int, input_to_show.shape)
+        self.imageSize = tuple(input_to_show.shape)
+        height1, width1, channel1 = self.imageSize
 
         #normalize
         ratio1 = 341 / height1
         ratio2 = 471 / width1
-        ratioi = min(ratio1, ratio2)
+        self.inputRatio = min(ratio1, ratio2)
 
         qImg = qimage2ndarray.array2qimage(cv2.resize(input_to_show,
-            dsize=(int(width1*ratioi),int(height1*ratioi)))).rgbSwapped()
+            dsize=(int(width1*self.inputRatio),int(height1*self.inputRatio)))).rgbSwapped()
         self.inputImg.setPixmap(QPixmap(qImg))
 
         '''if self.file_loc:
@@ -117,23 +96,33 @@ class WindowClass(QMainWindow, form_class):
                 strength = self.denoiseSlider.value()
                 filtered = filters.apply_denoise(filtered.astype(np.uint8), strength, thresh)
 
-            height2, width2 = filtered.shape
+            filtered = filters.convert_gray_to_rgb_matrix(filtered)
+            height2, width2, channel2 = self.imageSize
 
             # normalize
             ratio3 = 519 / height2
             ratio4 = 569 / width2
-            ratioo = min(ratio3, ratio4)
-            print(ratioo)
-
-            qImg = qimage2ndarray.array2qimage(cv2.resize(filtered,
-                dsize=(int(width2*ratioo), int(height2*ratioo))).astype(np.uint8), normalize=False)
-            self.outputImg.setPixmap(QPixmap(qImg))
+            self.outputRatio = min(ratio3, ratio4)
             self.filtered = filtered
-            del filtered
 
-    def show_color_dialog(self):
+            qImg = qimage2ndarray.array2qimage(cv2.resize(self.filtered,
+                dsize=(int(width2*self.outputRatio), int(height2*self.outputRatio))).astype(np.uint8), normalize=False)
+            self.outputImg.setPixmap(QPixmap(qImg))
+
+    def change_color(self):
         self.strokeColor = QColorDialog.getColor()
-        print(self.strokeColor.name())
+        if self.strokeColor:
+            self.strokeColorFrame.setStyleSheet(
+                "background-color: %s" % self.strokeColor.name())
+
+            #input as rgb style matrix
+            #have to write in another matrix since i derive the colored stroke from original white one
+            self.c_filtered = filters.set_stroke(self.filtered.astype(np.uint8), self.strokeColor.name()[1:])
+            height2, width2, channel2 = self.imageSize
+
+            qImg = qimage2ndarray.array2qimage(cv2.resize(self.c_filtered,
+                dsize=(int(width2*self.outputRatio), int(height2*self.outputRatio))).astype(np.uint8), normalize=False)
+            self.outputImg.setPixmap(QPixmap(qImg))
 
     def save_image(self):
         file_name, file_extension = self.file_loc.split(".")
