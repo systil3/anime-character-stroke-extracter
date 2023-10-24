@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from copy import deepcopy
 
 def apply_filter(imgpath, sobelw, cannyw, lapw):
     img = cv2.imread(imgpath, 0).astype(np.uint8)
@@ -18,12 +19,19 @@ def apply_gate(target, thresh):
     return target
 
 def apply_denoise(target, strength, thresh):
-    print("---")
-    res = cv2.fastNlMeansDenoising(target, None, strength, strength, 5, 21)
+
+    res = cv2.fastNlMeansDenoising(target, None, strength, 5, 21)
+    res_copied = deepcopy(res)
+
+    non_zero_indices = np.argwhere(res_copied != 0)
+
+    for i, j in non_zero_indices:
+        if (res_copied[i-1:i+2, j-1:j+2] == 0).all():
+            res[i,j] = 0
+
     ker_sharpen = np.array([
-        [1, -2, 1],
-        [-2, 4, -2],
-        [1, -2, 1]])
-    #res = cv2.filter2D(target, -1, ker_sharpen)
-    res[res<thresh] = 0
+        [1, 1, 1],
+        [1, 1, 1],
+        [1, 1, 1]])
+
     return res
